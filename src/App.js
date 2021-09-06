@@ -9,10 +9,32 @@ import 'jspdf-autotable'
 import { saveAs } from 'file-saver';
 import dataExample from './data'
 import processing from './processing'
+import {useRef, useEffect} from 'react'
 
-window._saveAs = saveAs;
+class WorkerHandler {
+  constructor() {
+    this.worker = null
+  }
+  
+  setup() {
+    this.worker = new Worker('http://localhost:3000/worker/core.js');
+    this.worker.addEventListener('message', (event) => {
+      console.log('received payload from worker:', event.data.payload);
+    
+      saveAs(event.data.payload, 'test.pdf');
+    });
+  }
+  requestPDFDownload() {
+    if (!this.worker) {
+      this.setup();
+    }
+  
+    this.worker.postMessage({ action: 'download', payload: dataExample })
+  }
+}
 
 function App() {
+  const workerHandler = useRef(null);
   const [exportPdfWorker] = useWorker(
     (data, conditions) => {
       const doc = new jsPDF()
@@ -28,11 +50,14 @@ function App() {
       doc.save('nazwa.pdf')
     },
     {
-      // localDependencies: () => [jsPDF, /*jspdf, jspdf-autotable, ArrayStore*//*, devextreme/data/array_store*/]
-      dependencies: () => [jsPDF, /*jspdf, jspdf-autotable, ArrayStore*//*, devextreme/data/array_store*/]
+      localDependencies: () => ['jspdf', 'jspdf-autotable', 'devextreme/data/array_store']
     }
   )
 
+  useEffect(() => {
+    workerHandler.current = new WorkerHandler();
+  }, []);
+  
   const exportPdfWorkerHandler = (e) => {
     const conditions = undefined
     const fcn = async () => {
@@ -46,38 +71,25 @@ function App() {
     const conditions = undefined
     const doc = new jsPDF()
     let outDataSource = new ArrayStore(dataExample)
-    const loadRes = outDataSource
-      .load({ filter: conditions });
-    console.log('loadres:',loadRes);
-    loadRes
+    
+    outDataSource
+      .load({ filter: conditions })
       .done((filteredData => {
-        console.warn('wtf')
-        
         doc.autoTable({
           body: processing.getDetails(filteredData),
           columns: processing.columns,
         })
-      })).catch(console.error)
-    console.warn('?')
+      }));
     
-    // doc.save('nazwa.pdf')
-    // console.log('??????raw output:', doc.output());
-    saveAs(doc.output('blob'), 'test-666.pdf');
-    
+    doc.save('nazwa.pdf')
     e.cancel = true
   }
 
 
   const delegateToWorker = () => {
     console.log('dataexample???', dataExample)
-    
-    const worker = new Worker('http://localhost:3000/worker/core.js');
-    worker.addEventListener('message', (event) => {
-      console.log('received payload from worker:', event.data.payload);
-      
-      saveAs(event.data.payload, 'test.pdf');
-    });
-    worker.postMessage({action: 'start', payload: dataExample})
+  
+    workerHandler.current.requestPDFDownload(dataExample);
   }
   
   return (
@@ -86,7 +98,7 @@ function App() {
         <img src={logo} className="App-logo" alt="logo" />
         <Button color='primary' onClick={e => exportPdfWorkerHandler(e)}>WORKER: Export to pdf</Button>
         <Button color='primary' onClick={e => onExportPdf(e)}>NO-WORKER: Export to pdf</Button>
-        <Button color='primary' onClick={delegateToWorker}>OK-WORKER: Export to pdf</Button>
+        <Button color='success' onClick={delegateToWorker}>Proper-WORKER: Export to pdf</Button>
       </header>
     </div>
   )

@@ -9,34 +9,30 @@ self.addEventListener('message', (event) => {
   
   console.log('(message) event:', event.data);
   
-  if (event.data.action === 'start') {
-    start(event.data.payload);
+  if (event.data.action === 'download') {
+    download(event.data.payload);
   }
 });
 
-function start(data) {
-  const conditions = {};
+function download(data) {
+  const conditions = undefined;
   
   const doc = new WorkerExport.jsPDF()
   let outDataSource = new WorkerExport.ArrayStore(data)
   
-  const loadRes = outDataSource
-    .load({ filter: conditions });
-  console.log('loadRes:', loadRes);
-    loadRes
+  outDataSource
+    .load({ filter: conditions })
     .done((filteredData => {
-      console.log('---')
-      
       doc.autoTable({
         body: WorkerExport.processing.getDetails(filteredData),
         columns: WorkerExport.processing.columns,
       })
-      console.log('done out:', doc.output());
-    }));
-    loadRes.catch(console.error)
+    }))
+    .catch(console.error);
+  
   self.postMessage({
     message: 'start-response',
+    // WebWorker doesn't have access to DOM, so the save process (which under the hood uses some Canvas magic via file-saver lib) must be done in main thread
     payload: doc.output('blob'),
   });
-  // doc.save('nazwa.pdf')
 }
